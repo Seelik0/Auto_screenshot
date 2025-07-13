@@ -20,11 +20,14 @@ from PySide6.QtWidgets import QLabel, QMainWindow, QPushButton, QApplication
 2025年 6月 16日、プログラミング練習のため改良。
 """
 
-print("\nSupports FHD (1920 x 1080) only\nMulti monitor not supported\n")
+print("Supports FHD (1920 x 1080) only\nMulti monitor not supported\n")
+print("L-shift to screenshot\n")
 
 class repeat_ss(QMainWindow):
     def __init__(self):
         super().__init__()
+
+        self.UI()
 
         self.config = configparser.ConfigParser()
         self.stop_event = threading.Event()
@@ -39,8 +42,8 @@ class repeat_ss(QMainWindow):
             self.config["custom resolution"] = {
                 "x": "0",
                 "y": "0",
-                "width": "0",
-                "height": "0"
+                "width": "1920",
+                "height": "1080"
             }
             with open("config.ini", "w", encoding="utf-8") as configfile:
                 self.config.write(configfile)
@@ -53,20 +56,22 @@ class repeat_ss(QMainWindow):
             os.makedirs(self.save_dir)
 
         self.counter = int(self.config["config"]["counter"])
+        self.test_counter = 1
 
-        self.choice_thread = threading.Thread(target=self.choice, name="choice")
-        self.choice_thread.start()
-
-        self.UI()
+        self.main_thread = threading.main_thread()
+        choice_thread = threading.Thread(target=self.choice, name="choice")
+        choice_thread.start()
+        debug_thread = threading.Thread(target=self.pos, name="pos")
+        debug_thread.start()
 
     def UI(self):
         self.setWindowTitle("Info_screenshot")
-        self.setFixedSize(150, 150)
+        self.setFixedSize(150, 190)
         self.setStyleSheet("font-size: 16px;")
 
-        label_run = QLabel("Running!!", self)
-        label_run.setGeometry(0, 0, 90, 30)
-        label_run.setStyleSheet("color: #fd0003")
+        self.label_run = QLabel("Not running", self)
+        self.label_run.setGeometry(0, 0, 90, 30)
+        self.label_run.setStyleSheet("color: #fd0003")
 
         label_current = QLabel("Current count:", self)
         label_current.setGeometry(0, 20, 180, 30)
@@ -96,14 +101,47 @@ class repeat_ss(QMainWindow):
         self.label_counter_.setGeometry(110, 80, 180, 30)
         self.label_counter_.setStyleSheet("color: #fd0003")
 
-        button = QPushButton("Stop", self)
-        button.setGeometry(20, 110, 110, 30)
+        self.label_xy = QLabel("Pos   X: Y:", self)
+        self.label_xy.setGeometry(0, 100, 180, 30)
 
-        button.clicked.connect(self.stop_button)
+        button1 = QPushButton("Stop", self)
+        button1.setGeometry(70, 140, 70, 30)
+
+        button2 = QPushButton("Test", self)
+        button2.setGeometry(0, 140, 70, 30)
+
+        button1.clicked.connect(self.stop_button)
+        button2.clicked.connect(self.test)
 
     def stop_button(self):
         if self.repeat_thread.is_alive():
             self.stop_event.set()
+
+    def pos(self):
+        press_lshift = False
+        while self.main_thread.is_alive():
+            mouse_x, mouse_y = win32api.GetCursorPos()
+            self.label_xy.setText(str(f"Pos   X:{mouse_x} Y:{mouse_y}"))
+            if win32api.GetKeyState(win32con.VK_LSHIFT) < 0 and not press_lshift:
+                self.test()
+                press_lshift = True
+                time.sleep(0.5)
+            else:
+                press_lshift = False
+
+    def test(self):
+        self.config.read("config.ini", encoding="UTF-8")
+
+        x = int(self.config["custom resolution"]["x"])
+        y = int(self.config["custom resolution"]["y"])
+        width = int(self.config["custom resolution"]["width"])
+        height = int(self.config["custom resolution"]["height"])
+
+        screenshot = pag.screenshot(region=(x, y, width, height))
+        file_name = os.path.join(self.save_dir, f"test{self.test_counter}.webp")
+        screenshot.save(file_name, format="webp", quality=50)
+
+        self.test_counter += 1
 
     def choice(self):
         user32 = ctypes.windll.user32
@@ -250,6 +288,7 @@ class repeat_ss(QMainWindow):
 
         self.label_wait_time.setText(str(waiting_time))
         self.label_counter_.setText(str(self.counter))
+        self.label_run.setText(str("RUNNING !!"))
 
         hwnd = hwnd_window[0]
 
@@ -300,9 +339,13 @@ class repeat_ss(QMainWindow):
                 print("DONE")
         except pag.FailSafeException or Exception:
             print("ERROR")
-
-if __name__ == "__main__":
+    
+def main():
     app = QApplication([])
     window = repeat_ss()
     window.show()
     app.exec()
+
+
+if __name__ == "__main__":
+    main()
